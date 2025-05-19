@@ -60,8 +60,8 @@ function initThree() {
 
   // 3) Scene / Camera / Renderer
   const scene = new THREE.Scene();
-  // (Bạn có thể bật background nếu muốn)
-//  scene.background = new THREE.Color(0xf8f9fe);
+  // Thêm một ambient light mạnh hơn để tránh các vùng quá tối
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0)); // Tăng cường độ ánh sáng xung quanh
 
   const camera = new THREE.PerspectiveCamera(
     45,
@@ -69,8 +69,8 @@ function initThree() {
     0.1,
     1000
   );
-    camera.position.set(4, 3, 0); 
-    camera.lookAt(0, 1, 0);
+  camera.position.set(4, 2, 2); 
+  camera.lookAt(0, 1, 0);
 
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -80,21 +80,115 @@ function initThree() {
   renderer.setSize(heroImage.clientWidth, heroImage.clientHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setClearColor(0x000000, 0); // transparent
+  
+  // Bật tính năng physically correct lighting để cải thiện hiệu ứng ánh sáng
+  renderer.physicallyCorrectLights = true;
+  // Bật shadows nếu cần (không bắt buộc nhưng giúp cải thiện chất lượng hình ảnh)
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  // Ánh sáng
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-  dirLight.position.set(5, 10, 7.5);
-  scene.add(dirLight);
-  scene.add(new THREE.AmbientLight(0x404040));
+  // Ánh sáng - Cấu hình lại hoàn toàn với màu sắc tươi sáng hơn
+  // 1. Ánh sáng chính từ phía trước (tăng cường độ)
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
+  keyLight.position.set(0, 2, 5); // Đặt phía trước model
+  keyLight.castShadow = true;
+  scene.add(keyLight);
+  
+  // 2. Ánh sáng từ phía sau để highlight các cạnh
+  const backLight = new THREE.DirectionalLight(0xffffcc, 1.2); // Ánh sáng vàng nhạt để tăng độ ấm
+  backLight.position.set(0, 3, -5);
+  scene.add(backLight);
+  
+  // 3. Ánh sáng từ bên trái - ánh sáng xanh nhạt
+  const leftLight = new THREE.DirectionalLight(0xccffff, 1.2);
+  leftLight.position.set(-5, 2, 0);
+  scene.add(leftLight);
+  
+  // 4. Ánh sáng từ bên phải - ánh sáng hồng nhạt
+  const rightLight = new THREE.DirectionalLight(0xffccff, 1.2);
+  rightLight.position.set(5, 2, 0);
+  scene.add(rightLight);
+  
+  // 5. Thêm ánh sáng đặc biệt cho vòng trên đầu - màu hơi đỏ để làm nổi bật màu máu
+  const haloLight = new THREE.SpotLight(0xff3333, 2.0, 15, Math.PI/4, 0.5);
+  haloLight.position.set(0, 6, 0); // Đặt trên đỉnh đầu
+  haloLight.target.position.set(0, 3, 0);
+  scene.add(haloLight);
+  scene.add(haloLight.target);
+  
+  // 6. Thêm một số point light xung quanh để tạo highlight cho vật liệu trong suốt
+  const pointLight1 = new THREE.PointLight(0xffffff, 1.5, 10);
+  pointLight1.position.set(0, 2, 0); // Đặt giữa model
+  scene.add(pointLight1);
+  
+  // Ánh sáng điểm màu đỏ để làm nổi bật màu máu ở các góc
+  const redLight1 = new THREE.PointLight(0xff0000, 2.0, 5);
+  redLight1.position.set(2, 0, 2); // Vị trí tay phải
+  scene.add(redLight1);
+  
+  const redLight2 = new THREE.PointLight(0xff0000, 2.0, 5);
+  redLight2.position.set(-2, 0, 2); // Vị trí tay trái
+  scene.add(redLight2);
+  
+  // Thêm ánh sáng xanh nhạt để làm nổi bật phần thân trong suốt
+  const blueLight = new THREE.PointLight(0x00ccff, 1.5, 8);
+  blueLight.position.set(0, 1, 0); // Đặt giữa thân
+  scene.add(blueLight);
 
   // 4) Load model và xử lý bounding box
   const loader = new THREE.GLTFLoader();
   let model, mixer;
 
   loader.load(
-    '/assets/models/mobile_home.glb',
+    '/assets/models/angel.glb',
     gltf => {
       model = gltf.scene;
+      
+      // Tùy chỉnh materials để cải thiện hiển thị với ánh sáng mới
+      model.traverse(function(node) {
+        if (node.isMesh) {
+          // Nếu là vật liệu trong suốt hoặc glass
+          if (node.material && node.material.transparent) {
+            node.material.roughness = 0.05;     // Giảm roughness để tăng độ bóng
+            node.material.metalness = 1.0;     // Tăng metalness tối đa để thêm phản xạ
+            node.material.envMapIntensity = 2.0; // Tăng cường độ phản xạ môi trường
+            
+            // Tăng độ sáng cho các vật liệu trong suốt
+            if (node.material.color) {
+              // Làm sáng lên các màu sẵn có
+              node.material.color.r = Math.min(1, node.material.color.r * 1.2);
+              node.material.color.g = Math.min(1, node.material.color.g * 1.2);
+              node.material.color.b = Math.min(1, node.material.color.b * 1.2);
+              node.material.emissive = new THREE.Color(0x222222); // Thêm phát sáng nhẹ
+            }
+          }
+          
+          // Đặc biệt cho các phần có màu máu (đỏ)
+          if (node.material && node.material.name && 
+             (node.material.name.includes('blood') || 
+              node.material.name.includes('red') || 
+              (node.material.color && node.material.color.r > 0.7 && node.material.color.g < 0.3))) {
+            // Tăng cường màu đỏ và thêm phát sáng
+            node.material.emissive = new THREE.Color(0x330000);
+            node.material.emissiveIntensity = 0.5;
+            if (node.material.color) {
+              node.material.color.setRGB(1.0, 0.1, 0.1); // Màu đỏ tươi
+            }
+          }
+          
+            if (node.name && (node.name.includes('halo') || node.name.includes('ring') || node.position.y > 3)) {
+                node.material.emissive = new THREE.Color(0x330000); // Phát sáng đỏ đậm
+                node.material.emissiveIntensity = 1.2; // Tăng cường độ phát sáng
+                if (node.material.color) {
+                    node.material.color.setRGB(0.1, 0.0, 0.0); // Màu đỏ đậm hơn
+                }
+            }
+          
+          // Đảm bảo các mesh nhận shadows
+          node.castShadow = true;
+          node.receiveShadow = true;
+        }
+      });
 
       // --- Tính bounding box ---
       const box = new THREE.Box3().setFromObject(model);
@@ -104,18 +198,18 @@ function initThree() {
 
       // 4a) Scale để fit canvas (dùng max của y hoặc x)
       const maxDim = Math.max(size.x, size.y, size.z);
-      const scale  = 4 / maxDim; // bạn có thể tăng lên 5 hoặc 6 nếu muốn to hơn
+      const scale  = 3 / maxDim; // có thể tăng lên 5 hoặc 6 nếu muốn to hơn
       model.scale.setScalar(scale);
 
       // 4b) Center chỉ X/Z, và dời model lên để đáy chạm y=0
-      //    center = midpoint, nhưng ta chỉ shift x,z:
+      //     center = midpoint, nhưng ta chỉ shift x,z:
       const center = box.getCenter(new THREE.Vector3());
       model.position.x -= center.x * scale;
       model.position.z -= center.z * scale;
       // Dời lên: min.y * scale cho đáy nằm y=0 rồi cộng một tí margin
       model.position.y -= min.y * scale;
-      model.position.y -= 1; // nâng thêm 0.1 nếu bạn muốn model "nổi" nhẹ
-
+      model.position.y -= 1; // nâng thêm nếu bạn muốn model "nổi" nhẹ
+      model.rotation.y = 1.2;
       scene.add(model);
 
       // 5) Animation nếu có
@@ -128,7 +222,7 @@ function initThree() {
         });
       }
 
-      // Bắt đầu render loop
+      // Bắt đầu render loop với hiệu ứng xoay nhẹ
       animate();
     },
     undefined,
@@ -138,59 +232,37 @@ function initThree() {
     }
   );
 
-//   // 6) Interaction (giữ nguyên của bạn)
-//   let isDragging = false;
-//   let prevMouse = { x: 0, y: 0 };
+  // Thêm hiệu ứng tự động xoay nhẹ nhàng
+  let autoRotate = true;
+  const autoRotateSpeed = 0.005;
 
-//   const onPointerDown = e => { isDragging = true; prevMouse = { x: e.clientX, y: e.clientY }; };
-//   const onPointerUp   = () => { isDragging = false; };
-//   const onPointerMove = e => {
-//     if (!isDragging || !model) return;
-//     const dx = e.clientX - prevMouse.x;
-//     const dy = e.clientY - prevMouse.y;
-//     model.rotation.y += dx * 0.01;
-//     model.rotation.x += dy * 0.01;
-//     prevMouse = { x: e.clientX, y: e.clientY };
-//   };
-
-//   canvas.addEventListener('mousedown',  onPointerDown);
-//   canvas.addEventListener('mousemove',  onPointerMove);
-//   canvas.addEventListener('mouseup',    onPointerUp);
-//   canvas.addEventListener('mouseleave', onPointerUp);
-
-//   canvas.addEventListener('touchstart', e => {
-//     isDragging = true;
-//     prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-//     e.preventDefault();
-//   });
-//   canvas.addEventListener('touchmove', e => {
-//     if (!isDragging || !model) return;
-//     const dx = e.touches[0].clientX - prevMouse.x;
-//     const dy = e.touches[0].clientY - prevMouse.y;
-//     model.rotation.y += dx * 0.01;
-//     model.rotation.x += dy * 0.01;
-//     prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-//     e.preventDefault();
-//   });
-//   canvas.addEventListener('touchend', onPointerUp);
-
-//   // 7) Resize
-//   window.addEventListener('resize', () => {
-//     camera.aspect = heroImage.clientWidth / heroImage.clientHeight;
-//     camera.updateProjectionMatrix();
-//     renderer.setSize(heroImage.clientWidth, heroImage.clientHeight);
-//   });
-
-  // 8) Render loop
+  // 8) Render loop cải tiến
   const clock = new THREE.Clock();
   function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
+    
+    // Cập nhật animation nếu có
     if (mixer) mixer.update(delta);
+    
+    // Tự động xoay model
+    if (model && autoRotate) {
+      model.rotation.y += autoRotateSpeed;
+    }
+    
+    // Cập nhật vị trí đèn để theo camera
+    keyLight.position.copy(camera.position);
+    
     renderer.render(scene, camera);
   }
+  
+  // Xử lý resize
+  window.addEventListener('resize', () => {
+    camera.aspect = heroImage.clientWidth / heroImage.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(heroImage.clientWidth, heroImage.clientHeight);
+  });
 }
-
 
 function generateBubbles(count) {
     const container = document.querySelector('.bubbles-container');
